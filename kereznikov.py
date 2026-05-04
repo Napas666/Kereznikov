@@ -89,29 +89,38 @@ def calibrate(result_label):
         return
 
     def _run():
-        PIXELS = 300  # двигаем на 300 px вправо
-        result_label.configure(text="Жди 1 сек...", text_color="#fc8")
-        time.sleep(1.0)
+        PIXELS = 500
+        result_label.configure(text="Жди 2 сек — не трогай мышь...", text_color="#fc8")
+        time.sleep(2.0)
 
         yaw_before = get_angles()[1]
+        result_label.configure(text=f"До: yaw={yaw_before:.2f}, двигаю...", text_color="#fc8")
+
         move_mouse(PIXELS, 0)
-        time.sleep(0.15)                      # ждём пока CS обработает ввод
+        time.sleep(0.5)                       # CS должен обработать ввод
+
         yaw_after = get_angles()[1]
-
-        delta = norm(yaw_after - yaw_before)  # сколько градусов повернулись
-
-        if abs(delta) < 0.5:
-            result_label.configure(text="Не сработало — запусти CS и войди на карту", text_color="#f44")
-            return
-
-        ppd = PIXELS / abs(delta)             # пикселей на градус
-        CFG['pix_per_deg'] = ppd
-
-        # Двигаем мышь обратно чтобы вернуть вид
-        move_mouse(-PIXELS, 0)
+        delta = norm(yaw_after - yaw_before)
 
         result_label.configure(
-            text=f"Готово! pix/deg={ppd:.2f}  (delta={delta:.1f}°)",
+            text=f"До={yaw_before:.1f} После={yaw_after:.1f} Δ={delta:.1f}°",
+            text_color="#fc8"
+        )
+        time.sleep(0.3)
+
+        if abs(delta) < 0.5:
+            result_label.configure(
+                text=f"Δ={delta:.1f}° — угол не изменился. Войди на карту и попробуй снова.",
+                text_color="#f44"
+            )
+            return
+
+        ppd = PIXELS / abs(delta)
+        CFG['pix_per_deg'] = ppd
+        move_mouse(-PIXELS, 0)   # возвращаем вид обратно
+
+        result_label.configure(
+            text=f"OK! pix/deg={ppd:.2f}  Δ={delta:.1f}°",
             text_color="#4f8"
         )
 
