@@ -77,7 +77,45 @@ def move_mouse(dx, dy):
 
 # ── СОСТОЯНИЕ ─────────────────────────────────────────────
 S   = {'aim': False, 'bhop': False}
-CFG = {'fov': 60., 'smooth': 3., 'sens': 3.0, 'head': True}
+# pix_per_deg — сколько пикселей мыши = 1 градус поворота
+# По умолчанию (sens=3.0, m_yaw=0.022): 1/0.066 ≈ 15.15
+CFG = {'fov': 60., 'smooth': 3., 'pix_per_deg': 15.15, 'head': True}
+
+# ── АВТО-КАЛИБРОВКА ЧУВСТВИТЕЛЬНОСТИ ────────────────────
+def calibrate(result_label):
+    """Двигает мышь вправо, измеряет угол, вычисляет pix_per_deg."""
+    if not ok:
+        result_label.configure(text="Сначала нажми ATTACH!", text_color="#f44")
+        return
+
+    def _run():
+        PIXELS = 300  # двигаем на 300 px вправо
+        result_label.configure(text="Жди 1 сек...", text_color="#fc8")
+        time.sleep(1.0)
+
+        yaw_before = get_angles()[1]
+        move_mouse(PIXELS, 0)
+        time.sleep(0.15)                      # ждём пока CS обработает ввод
+        yaw_after = get_angles()[1]
+
+        delta = norm(yaw_after - yaw_before)  # сколько градусов повернулись
+
+        if abs(delta) < 0.5:
+            result_label.configure(text="Не сработало — запусти CS и войди на карту", text_color="#f44")
+            return
+
+        ppd = PIXELS / abs(delta)             # пикселей на градус
+        CFG['pix_per_deg'] = ppd
+
+        # Двигаем мышь обратно чтобы вернуть вид
+        move_mouse(-PIXELS, 0)
+
+        result_label.configure(
+            text=f"Готово! pix/deg={ppd:.2f}  (delta={delta:.1f}°)",
+            text_color="#4f8"
+        )
+
+    threading.Thread(target=_run, daemon=True).start()
 
 # ── AIMBOT ────────────────────────────────────────────────
 def aim_loop():
@@ -98,14 +136,10 @@ def aim_loop():
                     if d < best_d: best_d, best = d, ta
 
                 if best:
-                    dp = norm(best[0] - ca[0]) / CFG['smooth']
+                    dp  = norm(best[0] - ca[0]) / CFG['smooth']
                     dy_ = norm(best[1] - ca[1]) / CFG['smooth']
-                    # Конвертируем градусы в пиксели мыши
-                    # CS 1.6: m_yaw=0.022 — degrees per pixel
-                    m_yaw = 0.022 * CFG['sens']
-                    px = dy_ / m_yaw
-                    py = -dp / m_yaw   # pitch: вверх = negative px
-                    move_mouse(px, py)
+                    ppd = CFG['pix_per_deg']
+                    move_mouse(dy_ * ppd, -dp * ppd)
             except: pass
         time.sleep(0.008)
 
@@ -187,9 +221,21 @@ def slider_row(lbl, mn, mx, df, fmt, cb):
     sl = ctk.CTkSlider(f, from_=mn, to=mx, command=_cb, button_color=AC, progress_color=AC)
     sl.set(df); sl.pack(fill="x",padx=12,pady=(4,10))
 
-slider_row("FOV (градусы)",       5, 180, 60,  lambda v:f"{int(v)}°",  lambda v: CFG.update({'fov': v}))
-slider_row("SMOOTH",              1,  15,  3,  lambda v:f"{v:.1f}x",   lambda v: CFG.update({'smooth': v}))
-slider_row("SENSITIVITY (CS)",  0.5,  10,  3,  lambda v:f"{v:.1f}",   lambda v: CFG.update({'sens': v}))
+slider_row("FOV (градусы)", 5, 180, 60, lambda v:f"{int(v)}°", lambda v: CFG.update({'fov': v}))
+slider_row("SMOOTH",       1,  15,  3, lambda v:f"{v:.1f}x",  lambda v: CFG.update({'smooth': v}))
+
+# ── Калибровка ────────────────────────────────────────────
+cal_f = ctk.CTkFrame(root, fg_color=C1, corner_radius=10); cal_f.pack(fill="x",padx=14,pady=3)
+cal_r = ctk.CTkFrame(cal_f, fg_color="transparent"); cal_r.pack(fill="x",padx=12,pady=(10,4))
+cal_lbl = ctk.CTkLabel(cal_r, text="pix/deg = 15.15  (не калиброван)",
+                        font=("Courier",10), text_color="#555")
+cal_lbl.pack(side="left")
+ctk.CTkButton(cal_f, text="⚙  AUTO CALIBRATE SENSITIVITY",
+              command=lambda: calibrate(cal_lbl),
+              fg_color="#0d1a0d", hover_color="#143014",
+              border_color="#44cc44", border_width=1,
+              font=("Arial",11,"bold"), height=34,
+              corner_radius=8).pack(fill="x",padx=12,pady=(0,10))
 
 # Голова / Тело
 tgt_f = ctk.CTkFrame(root, fg_color=C1, corner_radius=10); tgt_f.pack(fill="x",padx=14,pady=3)
